@@ -791,7 +791,7 @@ class AppStore {
 
             case 'Github':
                 // 显示个人信息（暂时用提示替代）
-                window.location.href = 'https://youz.space';
+                window.location.href = 'https://github.com/YouzSpace/apps';
                 break;
         }
     }
@@ -832,7 +832,7 @@ class AppStore {
                 break;
             case 'Github':
                 // 跳转到Github页面
-                window.open('https://youz.space', '_blank');
+                window.open('https://github.com/YouzSpace/apps', '_blank');
                 break;
         }
     }
