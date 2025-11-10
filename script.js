@@ -146,10 +146,12 @@ class AppStore {
 
             // 转换API数据为应用格式
             const newApps = data.documents.map((doc, index) => {
-                // 解析应用名称获取更详细的信息
-                const nameParts = doc.name.split(' ');
-                const appName = nameParts[0];
-                const version = nameParts.length > 1 ? nameParts[1] : '1.0.0';
+                // 使用完整的应用名称
+                const appName = doc.name;
+                
+                // 从名称中提取版本号（如果有）
+                const versionMatch = appName.match(/(\d+\.\d+\.\d+)$/);
+                const version = versionMatch ? versionMatch[1] : '1.0.0';
 
                 // 根据应用名称和subtitle推断分类
                 const category = this.inferCategory(appName, doc.subtitle);
@@ -826,7 +828,7 @@ class AppStore {
                 // 滚动到顶部
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 break;
-            case '分类':
+            case '免责声明':
                 // 显示免责声明页面
                 this.showDisclaimer();
                 break;
