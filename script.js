@@ -462,6 +462,7 @@ class AppStore {
 
         // 使用DocumentFragment提高性能，避免闪烁
         const fragment = document.createDocumentFragment();
+        const newCards = [];
 
         appsToShow.forEach(app => {
             const appCard = document.createElement('div');
@@ -480,6 +481,7 @@ class AppStore {
     </div>
 `;
 
+            newCards.push(appCard);
             fragment.appendChild(appCard);
         });
 
@@ -487,11 +489,11 @@ class AppStore {
         appsGrid.innerHTML = '';
         appsGrid.appendChild(fragment);
 
+        // 绑定新创建的卡片事件
+        this.bindAppEvents(newCards);
+
         // 更新加载更多按钮状态
         this.updateLoadMoreButton();
-
-        // 绑定应用点击事件
-        this.bindAppEvents();
     }
 
     // 增量渲染更多应用 - 避免闪烁
@@ -538,9 +540,6 @@ class AppStore {
 
             this.renderAppCards(appsToAdd, appsGrid);
         }
-
-        // 绑定新添加的应用事件
-        this.bindAppEvents();
 
         // 更新加载更多按钮状态
         this.updateLoadMoreButton();
@@ -594,6 +593,7 @@ class AppStore {
     // 渲染应用卡片的辅助函数
     renderAppCards(apps, container) {
         const fragment = document.createDocumentFragment();
+        const newCards = [];
 
         apps.forEach(app => {
             const appCard = document.createElement('div');
@@ -612,11 +612,15 @@ class AppStore {
     </div>
 `;
 
+            newCards.push(appCard);
             fragment.appendChild(appCard);
         });
 
         // 使用更平滑的添加方式
         container.appendChild(fragment);
+        
+        // 只为新创建的卡片绑定事件
+        this.bindAppEvents(newCards);
     }
 
     // 生成星级评分
@@ -629,29 +633,38 @@ class AppStore {
     }
 
     // 绑定应用事件
-    bindAppEvents() {
-        const appCards = document.querySelectorAll('.app-card');
+    bindAppEvents(targetCards = null) {
+        // 如果没有指定目标，则绑定所有卡片
+        if (!targetCards) {
+            targetCards = document.querySelectorAll('.app-card');
+        }
+        
+        // 转换为数组以确保兼容性
+        const appCards = Array.isArray(targetCards) ? targetCards : Array.from(targetCards);
 
         appCards.forEach(card => {
+            // 避免重复绑定事件
+            if (card.hasAttribute('data-event-bound')) {
+                return;
+            }
+
+            // 标记为已绑定事件
+            card.setAttribute('data-event-bound', 'true');
+
+            // 为每个卡片只绑定一个点击事件
             card.addEventListener('click', (e) => {
-                // 如果点击的是下载按钮，则不执行这里的代码
-                if (e.target.classList.contains('download-btn')) {
-                    return;
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // 获取应用ID - 优先从卡片本身获取，如果没有则从下载按钮获取
+                let appId = parseInt(card.dataset.appId);
+                if (!appId && e.target.classList.contains('download-btn')) {
+                    appId = parseInt(e.target.dataset.appId);
                 }
-
-                // 获取应用ID并直接调用下载功能
-                const appId = parseInt(card.dataset.appId);
-                this.downloadApp(appId);
-            });
-        });
-
-        // 绑定下载按钮的点击事件
-        const downloadButtons = document.querySelectorAll('.download-btn');
-        downloadButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                e.stopPropagation(); // 阻止事件冒泡
-                const appId = parseInt(button.dataset.appId);
-                this.downloadApp(appId);
+                
+                if (appId) {
+                    this.downloadApp(appId);
+                }
             });
         });
 
@@ -660,21 +673,13 @@ class AppStore {
     // 下载应用
     downloadApp(appId) {
         const app = this.appsData.find(a => a.id === appId);
-        if (!app) return;
-
-        // 使用实际的柚子云下载链接
-        if (app.downloadUrl) {
-            // 在新标签页打开下载页面
-            window.open(app.downloadUrl, '_blank');
-
-            // 显示下载提示
-            this.showDownloadToast(app.name);
-        } else {
-            // 如果没有下载链接，显示提示
-            alert(`准备下载 ${app.name}...\n\n下载链接正在生成中，请稍后重试。`);
+        
+        if (!app) {
+            return;
         }
 
-        console.log(`开始下载应用: ${app.name}, 下载链接: ${app.downloadUrl || '未设置'}`);
+        // 直接内嵌显示下载网站
+        this.showDownloadWebsite(app);
     }
 
     // 显示下载提示
@@ -714,6 +719,279 @@ class AppStore {
                 }
             }, 300);
         }, 3000);
+    }
+
+    // 显示下载网站弹窗
+    showDownloadWebsite(app) {
+        // 创建弹窗遮罩层
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'download-modal-overlay';
+        
+        // 创建弹窗容器
+        const modalContainer = document.createElement('div');
+        modalContainer.className = 'download-modal-container';
+        
+        // 创建弹窗内容
+        modalContainer.innerHTML = `
+            <div class="download-modal-header">
+                <div class="app-info-compact">
+                    <img src="${app.icon}" alt="${app.name}" class="app-icon-compact" 
+                         onerror="this.src='https://via.placeholder.com/32x32/CCCCCC/FFFFFF?text=APP'">
+                    <span class="app-name-compact">${app.name}</span>
+                </div>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <div class="download-modal-content">
+                <div class="loading-message">
+                    <div class="loading-spinner"></div>
+                    <p>正在加载下载页面...</p>
+                </div>
+                <iframe 
+                    src="${app.downloadUrl}" 
+                    class="download-iframe"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                    allowfullscreen>
+                </iframe>
+            </div>
+        `;
+
+        // 设置遮罩层样式
+        modalOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.2s ease-out;
+        `;
+
+        // 设置弹窗容器样式
+        modalContainer.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            max-height: 600px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            z-index: 10001;
+            opacity: 0;
+            transition: all 0.2s ease-out;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        `;
+
+        // 设置头部样式
+        const header = modalContainer.querySelector('.download-modal-header');
+        header.style.cssText = `
+            background: linear-gradient(135deg, var(--primary-color), #2196F3);
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        `;
+
+        // 应用信息样式
+        const appInfoCompact = modalContainer.querySelector('.app-info-compact');
+        appInfoCompact.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        `;
+
+        const appIconCompact = modalContainer.querySelector('.app-icon-compact');
+        appIconCompact.style.cssText = `
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        `;
+
+        modalContainer.querySelector('.app-name-compact').style.cssText = `
+            font-size: 16px;
+            font-weight: 600;
+        `;
+
+        // 关闭按钮样式
+        const closeBtn = modalContainer.querySelector('.close-modal-btn');
+        closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            line-height: 1;
+        `;
+
+        closeBtn.addEventListener('mouseenter', () => {
+            closeBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        });
+
+        closeBtn.addEventListener('mouseleave', () => {
+            closeBtn.style.backgroundColor = 'transparent';
+        });
+
+        // 内容区域样式
+        const content = modalContainer.querySelector('.download-modal-content');
+        content.style.cssText = `
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+            background: #f5f5f5;
+        `;
+
+        // 加载消息样式
+        const loadingMessage = modalContainer.querySelector('.loading-message');
+        loadingMessage.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 2;
+            transition: opacity 0.3s ease;
+            color: #666;
+        `;
+
+        const spinner = modalContainer.querySelector('.loading-spinner');
+        spinner.style.cssText = `
+            width: 32px;
+            height: 32px;
+            border: 3px solid #ddd;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        `;
+
+        // iframe样式
+        const iframe = modalContainer.querySelector('.download-iframe');
+        iframe.style.cssText = `
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+            display: block;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        `;
+
+        // iframe加载完成后隐藏加载消息
+        iframe.addEventListener('load', () => {
+            loadingMessage.style.opacity = '0';
+            setTimeout(() => {
+                loadingMessage.style.display = 'none';
+            }, 300);
+        });
+
+        // iframe加载错误处理
+        iframe.addEventListener('error', () => {
+            loadingMessage.innerHTML = `
+                <div style="text-align: center; color: #666;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                    <h3 style="margin-bottom: 8px;">加载失败</h3>
+                    <p style="margin-bottom: 16px;">无法加载下载页面，可能由于跨域限制</p>
+                    <button class="fallback-download-btn" style="
+                        background: var(--primary-color);
+                        color: white;
+                        border: none;
+                        padding: 12px 24px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 500;
+                    ">直接打开下载页面</button>
+                </div>
+            `;
+        });
+
+        // 关闭按钮事件
+        closeBtn.addEventListener('click', () => {
+            this.closeDownloadModal(modalOverlay, modalContainer);
+        });
+
+        // 点击遮罩层关闭
+        modalOverlay.addEventListener('click', () => {
+            this.closeDownloadModal(modalOverlay, modalContainer);
+        });
+
+        // 点击弹窗内容区域阻止关闭
+        modalContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // 备用下载按钮事件
+        setTimeout(() => {
+            const fallbackBtn = modalContainer.querySelector('.fallback-download-btn');
+            if (fallbackBtn) {
+                fallbackBtn.addEventListener('click', () => {
+                    window.open(app.downloadUrl, '_blank');
+                    this.closeDownloadModal(modalOverlay, modalContainer);
+                });
+            }
+        }, 100);
+
+        // ESC键关闭
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                this.closeDownloadModal(modalOverlay, modalContainer);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+
+        // 添加到页面
+        document.body.appendChild(modalOverlay);
+        document.body.appendChild(modalContainer);
+        
+        // 触发动画
+        requestAnimationFrame(() => {
+            modalOverlay.style.opacity = '1';
+            modalContainer.style.opacity = '1';
+            modalContainer.style.transform = 'translate(-50%, -50%) scale(1)';
+        });
+
+    }
+
+    // 关闭下载弹窗
+    closeDownloadModal(overlay, container) {
+        // 清理ESC事件监听器
+        document.removeEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeDownloadModal(overlay, container);
+            }
+        });
+
+        // 添加关闭动画
+        overlay.style.opacity = '0';
+        container.style.opacity = '0';
+        container.style.transform = 'translate(-50%, -50%) scale(0.9)';
+        
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+            if (container.parentNode) {
+                document.body.removeChild(container);
+            }
+        }, 200);
     }
 
     // 加载更多应用 - 修复分页和分类问题
